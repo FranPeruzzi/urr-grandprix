@@ -37,33 +37,58 @@ class Member:
         return group_min <= age <= group_max
 
 
-# Just testing to make sure this works.
-# TODO: Need to put this into one or more functions.
-src_path = r'roster.xlsx'
-sheet_name = 'Sheet1'
-# TODO: create a command line argument for src_path. Required.
-# TODO: allow for filetypes besides xlsx
-# TODO: create a command line arguemnt for sheet_name. If not present, use
-# index 0
+def urr_rowparser(row):
+    """Process one row of the URR Roster file, and return a dict with keys
+    appropriate for Member.__init__:
+    returned dict keys: [drn, lname, fname, city, state, sex, dob]
 
-wb = openpyxl.load_workbook(src_path, data_only=True, guess_types=True)
-sh = wb.get_sheet_by_name(sheet_name)
-header = None
-members = []
-for row in sh.iter_rows(row_offset=1):
-    # TODO: set up a configurable row parser
-    # skip the totals row
+    Return None if it's a row to be skipped."""
+    # filters
+    # skip the totals row and blank DRN
     if row[0].value in ('Total', None):
-        continue
-    # can't particpate in the grand prix if we don't know your age or sex
+        return None
+    # people without a sex listed cannot be assigned to an age group
     if str(row[14].value).strip().lower() not in ('m', 'f'):
-        continue
+        return None
+    # people without a dob listed cannot be assigned to an age group
     if row[15].value in ('', None):
-        continue
-    field_indices = [0, 6, 7, 10, 11, 14, 15]
-    fields = [row[i].value for i in field_indices]
-    m = Member(*fields)
-    print(m, 'Age %i' % m.age())
-    members.append(m)
+        return None
+    # now get the data we need
+    member_info = {'drn': row[0].value,
+                   'lname': row[6].value,
+                   'fname': row[7].value,
+                   'city': row[10].value,
+                   'state': row[11].value,
+                   'sex': row[14].value,
+                   'dob': row[15].value,
+                   }
+    return member_info
 
-print('Members processed: %i' % len(members))
+
+def members_from_excel(src_path, sheet_name=None, row_parser=urr_rowparser):
+    wb = openpyxl.load_workbook(src_path, data_only=True, guess_types=True)
+    if sheet_name is not None:
+        sh = wb.get_sheet_by_name(sheet_name)
+    else:
+        sh = wb.get_sheet_by_name(wb.sheetnames[0])
+    members = []
+    skipped = 0
+    for row in sh.iter_rows(row_offset=1):
+        fields = urr_rowparser(row)
+        if fields is not None:
+            m = Member(**fields)
+            # print(m, 'Age %i' % m.age())
+            members.append(m)
+        else:
+            skipped += 1
+    print('Members processed: %i' % len(members))
+    print('Skipped: %i' % skipped)
+    return members
+
+
+if __name__ == '__main__':
+    # TODO: create a command line argument for src_path. Required.
+    # TODO: allow for filetypes besides xlsx
+    # TODO: create a command line arguemnt for sheet_name. If not present, use
+    # index 0
+    members = members_from_excel(r'roster.xlsx')
